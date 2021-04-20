@@ -13,3 +13,8 @@ float getRandom(float min, float max)
 	float r = (float)rand() / (float)RAND_MAX;
 	return min + r * (max - min);
 }
+
+float lerp(float a, float b, float t)
+{
+	return a + t * (b - a);
+}

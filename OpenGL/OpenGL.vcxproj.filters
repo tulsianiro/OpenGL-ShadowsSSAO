@@ -74,5 +74,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="res\shaders\ssao_gbuffer.shader" />
+    <None Include="res\shaders\ssao_main.shader" />
+    <None Include="res\shaders\ssao_blur.shader" />
+    <None Include="res\shaders\deferred_light.shader" />
   </ItemGroup>
 </Project>

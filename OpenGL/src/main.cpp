@@ -76,6 +76,56 @@ GrayFBO generateGrayFBO()
 	return { FBO, colorBuffer };
 }
 
+std::vector<glm::vec3> generateSSAOKernel()
+{
+	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0);
+	std::default_random_engine generator;
+
+	std::vector<glm::vec3> ssaoKernel;
+	for (unsigned int i = 0; i < 64; ++i)
+	{
+		// generate a direction vector that precludes the bottom half of a sphere
+		glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
+		sample = glm::normalize(sample); // normalize it since it is a direction
+		sample *= randomFloats(generator); // multiply by a float between 0 and 1 to get a magnitude 
+		float scale = float(i) / 64.0;
+
+		// the above uniformly distributes our sample kernel, so we decrease the scaling factor such that 
+		// it accelerates towards the center as i increases.
+		scale = lerp(0.1f, 1.0f, scale * scale);
+		sample *= scale;
+		ssaoKernel.push_back(sample);
+	}
+
+	return ssaoKernel;
+}
+
+unsigned int generateSSAONoiseTexture()
+{
+	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0);
+	std::default_random_engine generator;
+
+	std::vector<glm::vec3> ssaoNoise;
+	// create 16 rotations that will be tiled across our pixels
+	for (unsigned int i = 0; i < 16; i++)
+	{
+		// rotate around z-axis (in tangent space). values between -1 and 1.
+		// direction vectors in tangent space, oriented about the normal
+		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f); 
+		ssaoNoise.push_back(noise);
+	}
+	unsigned int noiseTexture; glGenTextures(1, &noiseTexture);
+	glBindTexture(GL_TEXTURE_2D, noiseTexture);
+	// 4x4 texture that is GL_REPEAT e.g. tiled.
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4, 4, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	return noiseTexture;
+}
+
 
 int main()
 {
@@ -87,10 +137,50 @@ int main()
 	float dt = 0.0f, lastFrame = 0.0f;
 
 	Shader gBufferShader("ssao_gbuffer.shader");
+	Shader ssaoShader("ssao_main.shader");
+	Shader blurShader("ssao_blur.shader");
+	Shader deferredShader("deferred_light.shader");
 
 	GBuffer gBuffer = generateGBuffer(); // used for deferred shading
 	GrayFBO ssaoFBO = generateGrayFBO(); // used for calculating ssao texture
 	GrayFBO ssaoBlur = generateGrayFBO(); // used for blurring the texture to de-noise
+
+	// generate sample kernel to pass into SSAO shader
+	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel();
+	unsigned int noiseTexture = generateSSAONoiseTexture();
+	
+	/*
+		GBUFFER CONSTANT UNIFORMS
+	*/
+	gBufferShader.use();
+	gBufferShader.setMat4("projection", projectionMat);
+	gBufferShader.setInt("invertedNormals", 0);
+	/*
+		SSAO CONSTANT UNIFORMS
+	*/
+	ssaoShader.use();
+	for (unsigned int i = 0; i < 64; ++i)
+		ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+	ssaoShader.setMat4("projection", projectionMat);
+	ssaoShader.setInt("gPosition", 0);
+	ssaoShader.setInt("gNormal", 1);
+	ssaoShader.setInt("texNoise", 2);
+	/*
+		BLUR CONSTANT UNIFORMS
+	*/
+	blurShader.use();
+	blurShader.setInt("ssaoInput", 0);
+	/*
+		DEFERRED LIGHT CONSTANT UNIFORMS
+	*/
+	deferredShader.use();
+	deferredShader.setInt("gPosition", 0);
+	deferredShader.setInt("gNormal", 1);
+	deferredShader.setInt("gAlbedo", 2);
+	deferredShader.setInt("ssao", 3);
+
+	glm::vec3 lightPos(-2.0f, 4.0f, -1.0f);
+	glm::vec3 lightColor(0.4, 0.2, 0.2);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -100,16 +190,53 @@ int main()
 		processFrameInput(window, dt);
 
 		glm::mat4 viewMat = globalCamera.getViewMatrix();
-		// projection matrix stored as projectionMat globally
 
+		// geometry
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer.gBuffer);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		gBufferShader.use();
-		gBufferShader.setMat4("projection", projectionMat);
 		gBufferShader.setMat4("view", viewMat);	
-		gBufferShader.setInt("invertedNormals", 0);
 		drawScene(gBufferShader);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// ssao
+		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO.FBO);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		ssaoShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gNormal);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, noiseTexture);
+		drawQuad();
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// blur
+		glBindFramebuffer(GL_FRAMEBUFFER, ssaoBlur.FBO);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		blurShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ssaoFBO.colorBuffer);
+		drawQuad();
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// lighting
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		deferredShader.use();
+		// send light relevant uniforms
+		glm::vec3 lightPosView = glm::vec3(viewMat * glm::vec4(lightPos, 1.0));
+		deferredShader.setVec3("light.Position", lightPosView);
+		deferredShader.setVec3("light.Color", lightColor);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gNormal);
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gAlbedo);
+		glActiveTexture(GL_TEXTURE3); // add extra SSAO texture to lighting pass
+		glBindTexture(GL_TEXTURE_2D, ssaoBlur.colorBuffer);
+		drawQuad();
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
