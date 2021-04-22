@@ -6,6 +6,7 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoords;
 
 out vec3 FragPos;
+out vec3 lightSpacePos;
 out vec2 TexCoords;
 out vec3 Normal;
 
@@ -14,10 +15,13 @@ uniform bool invertedNormals;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform mat4 lightSpaceMatrix;
 
 void main()
 {
-	vec4 viewPos = view * model * vec4(aPos, 1.0);
+	vec4 worldPos = model * vec4(aPos, 1.0);
+	vec4 viewPos = view * worldPos;
+	lightSpacePos = (lightSpaceMatrix * worldPos).xyz;
 	FragPos = viewPos.xyz;
 	TexCoords = aTexCoords;
 
@@ -35,15 +39,18 @@ void main()
 layout(location = 0) out vec3 gPosition;
 layout(location = 1) out vec3 gNormal;
 layout(location = 2) out vec3 gAlbedo;
+layout(location = 3) out vec3 gLightSpacePosition;
 
 in vec2 TexCoords;
 in vec3 FragPos;
 in vec3 Normal;
+in vec3 lightSpacePos;
 
 void main()
 {
 	// store the fragment position vector in the first gbuffer texture
 	gPosition = FragPos;
+	gLightSpacePosition = lightSpacePos;
 	// also store the per-fragment normals into the gbuffer
 	gNormal = normalize(Normal);
 	// and the diffuse per-fragment color

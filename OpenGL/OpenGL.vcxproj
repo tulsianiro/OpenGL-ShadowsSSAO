@@ -124,9 +124,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="res\shaders\deferred_light.shader" />
+    <None Include="res\shaders\depth_map.shader" />
     <None Include="res\shaders\ssao_blur.shader" />
     <None Include="res\shaders\ssao_gbuffer.shader" />
     <None Include="res\shaders\ssao_main.shader" />
+    <None Include="res\shaders\depth_quad.shader" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

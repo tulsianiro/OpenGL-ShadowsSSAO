@@ -4,6 +4,7 @@
 
 extern Camera globalCamera;
 static bool cameraChange = false;
+extern bool useSSAO;
 
 void processFrameInput(GLFWwindow *window, float dt)
 {
@@ -73,5 +74,10 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 			cameraChange = true;
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
+	}
+
+	if (key == GLFW_KEY_X && action == GLFW_PRESS)
+	{
+		useSSAO = !useSSAO;
 	}
 }

@@ -5,6 +5,7 @@
 struct GBuffer
 {
 	unsigned int gBuffer, gPosition, gNormal, gAlbedo;
+	unsigned int gLightSpacePosition;
 };
 
 struct GrayFBO
@@ -14,7 +15,8 @@ struct GrayFBO
 
 GBuffer generateGBuffer()
 {
-	unsigned int gBuffer, gPosition, gNormal, gAlbedo; 
+	unsigned int gBuffer, gPosition, gNormal, gAlbedo;
+	unsigned int gLightSpacePosition;
 	glGenFramebuffers(1, &gBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
 	// position color buffer
@@ -28,6 +30,15 @@ GBuffer generateGBuffer()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	// output color 0 of framebuffer goes into gPosition texture 
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+
+	glGenTextures(1, &gLightSpacePosition); glBindTexture(GL_TEXTURE_2D, gLightSpacePosition);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gLightSpacePosition, 0);
+
 	// normal color buffer
 	glGenTextures(1, &gNormal); glBindTexture(GL_TEXTURE_2D, gNormal); // same as above
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
@@ -44,8 +55,8 @@ GBuffer generateGBuffer()
 	// output color 2 of framebuffer goes into gAlbedo texture
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo, 0);
 	// tell OpenGL which color attachments we'll use (of this framebuffer) for rendering 
-	unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-	glDrawBuffers(3, attachments); // we will draw into these 3 attachments when rendering with gBuffer FBO
+	unsigned int attachments[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+	glDrawBuffers(4, attachments); // we will draw into these 4 attachments when rendering with gBuffer FBO
 	unsigned int rboDepth; // we want a depth attachment, but don't need it as a texture
 	glGenRenderbuffers(1, &rboDepth); glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT); // alloc
@@ -55,7 +66,7 @@ GBuffer generateGBuffer()
 		std::cout << "Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 
-	return { gBuffer, gPosition, gNormal, gAlbedo };
+	return { gBuffer, gPosition, gNormal, gAlbedo, gLightSpacePosition };
 }
 
 GrayFBO generateGrayFBO()
@@ -74,6 +85,28 @@ GrayFBO generateGrayFBO()
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 
 	return { FBO, colorBuffer };
+}
+
+GrayFBO generateShadowFBO(unsigned int shadowWidth, unsigned int shadowHeight)
+{
+	unsigned int depthMapFBO; glGenFramebuffers(1, &depthMapFBO);
+	unsigned int depthMap; glGenTextures(1, &depthMap);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowWidth, shadowHeight, 0,
+				 GL_DEPTH_COMPONENT, GL_FLOAT, NULL); // initialize empty texture
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	// we need a border because we want all coordinates outside of depth map range to not be in shadow
+	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO); // bind the FBO and attach depth to texture
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+	glDrawBuffer(GL_NONE); glReadBuffer(GL_NONE); // no color attachment on FBO
+	glBindFramebuffer(GL_FRAMEBUFFER, 0); // finally unbind the FBO and draw to window
+
+	return { depthMapFBO, depthMap };
 }
 
 std::vector<glm::vec3> generateSSAOKernel()
@@ -126,6 +159,7 @@ unsigned int generateSSAONoiseTexture()
 	return noiseTexture;
 }
 
+bool useSSAO = true;
 
 int main()
 {
@@ -140,20 +174,38 @@ int main()
 	Shader ssaoShader("ssao_main.shader");
 	Shader blurShader("ssao_blur.shader");
 	Shader deferredShader("deferred_light.shader");
+	Shader depthShader("depth_map.shader");
+	Shader quadShader("depth_quad.shader");
 
 	GBuffer gBuffer = generateGBuffer(); // used for deferred shading
 	GrayFBO ssaoFBO = generateGrayFBO(); // used for calculating ssao texture
 	GrayFBO ssaoBlur = generateGrayFBO(); // used for blurring the texture to de-noise
 
+	unsigned int SHADOW_WIDTH = 9182, SHADOW_HEIGHT = 9182;
+	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
+
 	// generate sample kernel to pass into SSAO shader
 	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel();
 	unsigned int noiseTexture = generateSSAONoiseTexture();
 	
+	// light constants
+	glm::vec3 lightPos(-2.0f, 4.0f, -1.0f);
+	quadShader.use();
+	quadShader.setInt("depthMap", 0);
+	glm::vec3 lightColor(0.4, 0.3, 0.2);
+	float nearPlane = 1.0f, farPlane = 7.5f;
+	glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
+	glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+	depthShader.use();
+	depthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+
 	/*
 		GBUFFER CONSTANT UNIFORMS
 	*/
 	gBufferShader.use();
 	gBufferShader.setMat4("projection", projectionMat);
+	gBufferShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 	gBufferShader.setInt("invertedNormals", 0);
 	/*
 		SSAO CONSTANT UNIFORMS
@@ -178,9 +230,14 @@ int main()
 	deferredShader.setInt("gNormal", 1);
 	deferredShader.setInt("gAlbedo", 2);
 	deferredShader.setInt("ssao", 3);
+	deferredShader.setInt("gLightSpacePosition", 4);
+	deferredShader.setInt("shadowMap", 5);
 
-	glm::vec3 lightPos(-2.0f, 4.0f, -1.0f);
-	glm::vec3 lightColor(0.4, 0.2, 0.2);
+	unsigned int objVAO, numVertices;
+	parseOBJ("tyra.obj", objVAO, numVertices);
+
+	unsigned int obj2VAO, numVertices2;
+	parseOBJ("backpack.obj", obj2VAO, numVertices2);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -189,15 +246,58 @@ int main()
 		lastFrame = currentFrame;
 		processFrameInput(window, dt);
 
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glm::mat4 viewMat = globalCamera.getViewMatrix();
+		glm::mat4 model = glm::mat4(1.0f);
+
+		depthShader.use();
+		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+		glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO.FBO);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		drawScene(depthShader);
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(2.0f, 2.5f, 1.3));
+		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.5));
+		depthShader.setMat4("model", model);
+		drawObj(objVAO, numVertices);
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(-2.0f, 0.0f, 2.0));
+		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.25));
+		depthShader.setMat4("model", model);
+		drawObj(obj2VAO, numVertices2);
+
+		// draw depth texture to screen
+		/*
+		glViewport(0, 0, 1280, 720);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		quadShader.use();
+		drawQuad();
+		*/
 
 		// geometry
+		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer.gBuffer);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		gBufferShader.use();
 		gBufferShader.setMat4("view", viewMat);	
 		drawScene(gBufferShader);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(2.0f, 2.5f, 1.3));
+		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.5));
+		gBufferShader.setMat4("model", model);
+		drawObj(objVAO, numVertices);
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(-2.0f, 0.0f, 2.0));
+		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.25));
+		gBufferShader.setMat4("model", model);
+		drawObj(obj2VAO, numVertices2);
 
 		// ssao
 		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO.FBO);
@@ -228,6 +328,7 @@ int main()
 		glm::vec3 lightPosView = glm::vec3(viewMat * glm::vec4(lightPos, 1.0));
 		deferredShader.setVec3("light.Position", lightPosView);
 		deferredShader.setVec3("light.Color", lightColor);
+		deferredShader.setBool("useSSAO", useSSAO);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
 		glActiveTexture(GL_TEXTURE1);
@@ -236,6 +337,10 @@ int main()
 		glBindTexture(GL_TEXTURE_2D, gBuffer.gAlbedo);
 		glActiveTexture(GL_TEXTURE3); // add extra SSAO texture to lighting pass
 		glBindTexture(GL_TEXTURE_2D, ssaoBlur.colorBuffer);
+		glActiveTexture(GL_TEXTURE4);
+		glBindTexture(GL_TEXTURE_2D, gBuffer.gLightSpacePosition);
+		glActiveTexture(GL_TEXTURE5);
+		glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
 		drawQuad();
 
 		glfwSwapBuffers(window);
