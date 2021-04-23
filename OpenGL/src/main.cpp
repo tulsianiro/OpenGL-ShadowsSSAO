@@ -2,6 +2,9 @@
 #include "shader.h"
 #include "draw.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 struct GBuffer
 {
 	unsigned int gBuffer, gPosition, gNormal, gAlbedo;
@@ -12,6 +15,43 @@ struct GrayFBO
 {
 	unsigned int FBO, colorBuffer;
 };
+
+unsigned int loadTexture(char const* path)
+{
+	unsigned int textureID;
+	glGenTextures(1, &textureID);
+
+	int width, height, nrComponents;
+	unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
+	if (data)
+	{
+		GLenum format;
+		if (nrComponents == 1)
+			format = GL_RED;
+		else if (nrComponents == 3)
+			format = GL_RGB;
+		else if (nrComponents == 4)
+			format = GL_RGBA;
+
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT); // for this tutorial: use GL_CLAMP_TO_EDGE to prevent semi-transparent borders. Due to interpolation it takes texels from next repeat 
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		stbi_image_free(data);
+	}
+	else
+	{
+		std::cout << "Texture failed to load at path: " << path << std::endl;
+		stbi_image_free(data);
+	}
+
+	return textureID;
+}
 
 GBuffer generateGBuffer()
 {
@@ -184,6 +224,8 @@ int main()
 	unsigned int SHADOW_WIDTH = 9182, SHADOW_HEIGHT = 9182;
 	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
 
+	unsigned int normalMap = loadTexture("normal_map.png");
+
 	// generate sample kernel to pass into SSAO shader
 	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel();
 	unsigned int noiseTexture = generateSSAONoiseTexture();
@@ -207,6 +249,7 @@ int main()
 	gBufferShader.setMat4("projection", projectionMat);
 	gBufferShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 	gBufferShader.setInt("invertedNormals", 0);
+	gBufferShader.setInt("normalMap", 0);
 	/*
 		SSAO CONSTANT UNIFORMS
 	*/
@@ -280,10 +323,13 @@ int main()
 		*/
 
 		// geometry
+		
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer.gBuffer);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		gBufferShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, normalMap);
 		gBufferShader.setMat4("view", viewMat);	
 		drawScene(gBufferShader);
 		model = glm::mat4(1.0f);

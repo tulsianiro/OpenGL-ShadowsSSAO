@@ -141,8 +141,10 @@ void drawScene(Shader &shader)
 {
 	glm::mat4 model = glm::mat4(1.0f);
 	shader.setMat4("model", model);
+	shader.setBool("useNormalMap", true);
 	drawPlane();
 	// cubes
+	shader.setBool("useNormalMap", false);
 	model = glm::mat4(1.0f);
 	model = glm::translate(model, glm::vec3(0.0f, 1.5f, 0.0));
 	model = glm::scale(model, glm::vec3(0.5f));

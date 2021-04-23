@@ -46,6 +46,10 @@ in vec3 FragPos;
 in vec3 Normal;
 in vec3 lightSpacePos;
 
+uniform mat4 view;
+uniform sampler2D normalMap;
+uniform bool useNormalMap;
+
 void main()
 {
 	// store the fragment position vector in the first gbuffer texture
@@ -53,6 +57,12 @@ void main()
 	gLightSpacePosition = lightSpacePos;
 	// also store the per-fragment normals into the gbuffer
 	gNormal = normalize(Normal);
+	if (useNormalMap)
+	{
+		vec3 tmpNorm = texture(normalMap, TexCoords).xyz;
+		vec4 correctedNorm = vec4(tmpNorm.x, tmpNorm.z, -tmpNorm.y, 0.0);
+		gNormal = normalize(view * correctedNorm).xyz;
+	}
 	// and the diffuse per-fragment color
 	gAlbedo.rgb = vec3(0.95); // 0.95 diffuse for everything
 }
