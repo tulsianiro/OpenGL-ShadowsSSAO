@@ -224,7 +224,7 @@ int main()
 	GrayFBO ssaoFBO = generateGrayFBO(); // used for calculating ssao texture
 	GrayFBO ssaoBlur = generateGrayFBO(); // used for blurring the texture to de-noise
 
-	unsigned int SHADOW_WIDTH = 12000, SHADOW_HEIGHT = 12000;
+	unsigned int SHADOW_WIDTH = 4096, SHADOW_HEIGHT = 4096;
 	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
 
 	unsigned int normalMap = loadTexture("normal_map.png");
@@ -234,11 +234,11 @@ int main()
 	unsigned int noiseTexture = generateSSAONoiseTexture();
 	
 	// light constants
-	glm::vec3 lightPos(0.4f, 5.0f, -5.0f);
+	glm::vec3 lightPos(0.5f, 6.0f, 4.0f);
 	glm::vec3 lightColor(0.3);
 	glm::mat4 lightProjection, lightView;
 	glm::mat4 lightSpaceMatrix;
-	float near_plane = 1.0f, far_plane = 14.0f;
+	float near_plane = 1.0f, far_plane = 16.0f;
 	//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 	lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
 	lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
@@ -304,13 +304,13 @@ int main()
 		glClear(GL_DEPTH_BUFFER_BIT);
 		drawScene(depthShader);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.4f, 3.0f, 1.0));
+		model = glm::translate(model, glm::vec3(1.3f, 3.0f, 1.5));
 		model = glm::rotate(model, glm::radians(140.0f), glm::normalize(glm::vec3(-2.0, 0.0, 1.0)));
 		model = glm::scale(model, glm::vec3(2.0));
 		depthShader.setMat4("model", model);
 		drawObj(objVAO, numVertices);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(-5.0f, 1.0f, -2.0));
+		model = glm::translate(model, glm::vec3(-5.0f, 1.2f, -2.0));
 		//model = glm::rotate(model, glm::radians(120.0f), glm::normalize(glm::vec3(1.0, 1.0, 3.0)));
 		model = glm::scale(model, glm::vec3(1.0));
 		depthShader.setMat4("model", model);
@@ -337,13 +337,13 @@ int main()
 		gBufferShader.setMat4("view", viewMat);	
 		drawScene(gBufferShader);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.4f, 3.0f, 1.0));
+		model = glm::translate(model, glm::vec3(1.3f, 3.0f, 1.5));
 		model = glm::rotate(model, glm::radians(140.0f), glm::normalize(glm::vec3(-2.0, 0.0, 1.0)));
 		model = glm::scale(model, glm::vec3(2.0));
 		gBufferShader.setMat4("model", model);
 		drawObj(objVAO, numVertices);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(-5.0f, 1.0f, -2.0));
+		model = glm::translate(model, glm::vec3(-5.0f, 1.2f, -2.0));
 		//model = glm::rotate(model, glm::radians(120.0f), glm::normalize(glm::vec3(1.0, 1.0, 3.0)));
 		model = glm::scale(model, glm::vec3(1.0));
 		gBufferShader.setMat4("model", model);
