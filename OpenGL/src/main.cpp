@@ -64,7 +64,7 @@ GBuffer generateGBuffer()
 	// create empty texture. with 16 bit float rgba, size width/height.
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
 	// no interpolation since we are reading these values in shaders
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); 
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -111,9 +111,9 @@ GBuffer generateGBuffer()
 
 GrayFBO generateGrayFBO()
 {
-	unsigned int FBO; glGenFramebuffers(1, &FBO);  
+	unsigned int FBO; glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-	unsigned colorBuffer; glGenTextures(1, &colorBuffer);	
+	unsigned colorBuffer; glGenTextures(1, &colorBuffer);
 	glBindTexture(GL_TEXTURE_2D, colorBuffer);
 	// create empty texture with only a single channel
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, SCR_WIDTH, SCR_HEIGHT, 0, GL_RED, GL_FLOAT, NULL);
@@ -187,7 +187,7 @@ unsigned int generateSSAONoiseTexture()
 	{
 		// rotate around z-axis (in tangent space). values between -1 and 1.
 		// direction vectors in tangent space, oriented about the normal
-		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f); 
+		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
 		ssaoNoise.push_back(noise);
 	}
 	unsigned int noiseTexture; glGenTextures(1, &noiseTexture);
@@ -204,8 +204,21 @@ unsigned int generateSSAONoiseTexture()
 
 bool useSSAO = true;
 
+enum FullscreenTexture
+{
+	NONE = 0,
+	SHADOW_MAP,
+	G_POSITION,
+	G_NORMAL,
+	SSAO_CORE,
+	SSAO_BLUR
+};
+
+int showTexInt = 0;
 int main()
 {
+	FullscreenTexture showTex = NONE;
+
 	GLFWwindow* window = initializeWindow(); if (!window) return -1;
 	bool success = loadGLFunctions(); if (!success) return -1;
 	glfwSetKeyCallback(window, keyCallback); glEnable(GL_DEPTH_TEST);
@@ -218,13 +231,13 @@ int main()
 	Shader blurShader("ssao_blur.shader");
 	Shader deferredShader("deferred_light.shader");
 	Shader depthShader("depth_map.shader");
-	Shader quadShader("depth_quad.shader");
+	Shader fullTexShader("full_tex.shader");
 
 	GBuffer gBuffer = generateGBuffer(); // used for deferred shading
 	GrayFBO ssaoFBO = generateGrayFBO(); // used for calculating ssao texture
 	GrayFBO ssaoBlur = generateGrayFBO(); // used for blurring the texture to de-noise
 
-	unsigned int SHADOW_WIDTH = 4096, SHADOW_HEIGHT = 4096;
+	unsigned int SHADOW_WIDTH = 16000, SHADOW_HEIGHT = 16000;
 	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
 
 	unsigned int normalMap = loadTexture("normal_map.png");
@@ -232,13 +245,13 @@ int main()
 	// generate sample kernel to pass into SSAO shader
 	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel();
 	unsigned int noiseTexture = generateSSAONoiseTexture();
-	
+
 	// light constants
-	glm::vec3 lightPos(0.5f, 6.0f, 4.0f);
+	glm::vec3 lightPos(5.0f, 8.0f, 9.0f);
 	glm::vec3 lightColor(0.3);
 	glm::mat4 lightProjection, lightView;
 	glm::mat4 lightSpaceMatrix;
-	float near_plane = 1.0f, far_plane = 16.0f;
+	float near_plane = 1.0f, far_plane = 30.0f;
 	//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 	lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
 	lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
@@ -327,14 +340,14 @@ int main()
 		*/
 
 		// geometry
-		
+
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer.gBuffer);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		gBufferShader.use();
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, normalMap);
-		gBufferShader.setMat4("view", viewMat);	
+		gBufferShader.setMat4("view", viewMat);
 		drawScene(gBufferShader);
 		model = glm::mat4(1.0f);
 		model = glm::translate(model, glm::vec3(1.3f, 3.0f, 1.5));
@@ -371,27 +384,64 @@ int main()
 		drawQuad();
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// lighting
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		deferredShader.use();
-		// send light relevant uniforms
-		glm::vec3 lightPosView = glm::vec3(viewMat * glm::vec4(lightPos, 1.0));
-		deferredShader.setVec3("light.Position", lightPosView);
-		deferredShader.setVec3("light.Color", lightColor);
-		deferredShader.setBool("useSSAO", useSSAO);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, gBuffer.gNormal);
-		glActiveTexture(GL_TEXTURE2);
-		glBindTexture(GL_TEXTURE_2D, gBuffer.gAlbedo);
-		glActiveTexture(GL_TEXTURE3); // add extra SSAO texture to lighting pass
-		glBindTexture(GL_TEXTURE_2D, ssaoBlur.colorBuffer);
-		glActiveTexture(GL_TEXTURE4);
-		glBindTexture(GL_TEXTURE_2D, gBuffer.gLightSpacePosition);
-		glActiveTexture(GL_TEXTURE5);
-		glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
-		drawQuad();
+		showTex = (FullscreenTexture)showTexInt;
+		if (showTex == NONE)
+		{
+			// lighting
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			deferredShader.use();
+			// send light relevant uniforms
+			glm::vec3 lightPosView = glm::vec3(viewMat * glm::vec4(lightPos, 1.0));
+			deferredShader.setVec3("light.Position", lightPosView);
+			deferredShader.setVec3("light.Color", lightColor);
+			deferredShader.setBool("useSSAO", useSSAO);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, gBuffer.gNormal);
+			glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_2D, gBuffer.gAlbedo);
+			glActiveTexture(GL_TEXTURE3); // add extra SSAO texture to lighting pass
+			glBindTexture(GL_TEXTURE_2D, ssaoBlur.colorBuffer);
+			glActiveTexture(GL_TEXTURE4);
+			glBindTexture(GL_TEXTURE_2D, gBuffer.gLightSpacePosition);
+			glActiveTexture(GL_TEXTURE5);
+			glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
+			drawQuad();
+		}
+		else
+		{
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			fullTexShader.use();
+			fullTexShader.setInt("myTex", 0);
+			glActiveTexture(GL_TEXTURE0);
+			if (showTex == SHADOW_MAP)
+			{
+				fullTexShader.setBool("grayscale", true);
+				glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
+			}
+			else if (showTex == G_POSITION)
+			{
+				fullTexShader.setBool("grayscale", false);
+				glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);
+			}
+			else if (showTex == G_NORMAL)
+			{
+				fullTexShader.setBool("grayscale", false);
+				glBindTexture(GL_TEXTURE_2D, gBuffer.gNormal);
+			}
+			else if (showTex == SSAO_CORE)
+			{
+				fullTexShader.setBool("grayscale", true);
+				glBindTexture(GL_TEXTURE_2D, ssaoFBO.colorBuffer);
+			}
+			else if (showTex == SSAO_BLUR)
+			{
+				fullTexShader.setBool("grayscale", true);
+				glBindTexture(GL_TEXTURE_2D, ssaoBlur.colorBuffer);
+			}
+			drawQuad();
+		}
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();

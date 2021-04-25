@@ -79,5 +79,6 @@
     <None Include="res\shaders\deferred_light.shader" />
     <None Include="res\shaders\depth_map.shader" />
     <None Include="res\shaders\depth_quad.shader" />
+    <None Include="res\shaders\full_tex.shader" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,7 @@
 extern Camera globalCamera;
 static bool cameraChange = false;
 extern bool useSSAO;
+extern int showTexInt;
 
 void processFrameInput(GLFWwindow *window, float dt)
 {
@@ -74,6 +75,31 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 			cameraChange = true;
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 		}
+	}
+	
+	if (key == GLFW_KEY_0 && action == GLFW_PRESS)
+	{
+		showTexInt = 0;
+	}
+	if (key == GLFW_KEY_1 && action == GLFW_PRESS)
+	{
+		showTexInt = 1;
+	}
+	if (key == GLFW_KEY_2 && action == GLFW_PRESS)
+	{
+		showTexInt = 2;
+	}
+	if (key == GLFW_KEY_3 && action == GLFW_PRESS)
+	{
+		showTexInt = 3;
+	}
+	if (key == GLFW_KEY_4 && action == GLFW_PRESS)
+	{
+		showTexInt = 4;
+	}
+	if (key == GLFW_KEY_5 && action == GLFW_PRESS)
+	{
+		showTexInt = 5;
 	}
 
 	if (key == GLFW_KEY_X && action == GLFW_PRESS)
