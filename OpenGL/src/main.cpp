@@ -129,22 +129,25 @@ GrayFBO generateGrayFBO()
 
 GrayFBO generateShadowFBO(unsigned int shadowWidth, unsigned int shadowHeight)
 {
-	unsigned int depthMapFBO; glGenFramebuffers(1, &depthMapFBO);
-	unsigned int depthMap; glGenTextures(1, &depthMap);
+	unsigned int depthMapFBO;
+	glGenFramebuffers(1, &depthMapFBO);
+	// create depth texture
+	unsigned int depthMap;
+	glGenTextures(1, &depthMap);
 	glBindTexture(GL_TEXTURE_2D, depthMap);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowWidth, shadowHeight, 0,
-				 GL_DEPTH_COMPONENT, GL_FLOAT, NULL); // initialize empty texture
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowWidth, shadowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-	// we need a border because we want all coordinates outside of depth map range to not be in shadow
 	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
 	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO); // bind the FBO and attach depth to texture
+	// attach depth texture as FBO's depth buffer
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
-	glDrawBuffer(GL_NONE); glReadBuffer(GL_NONE); // no color attachment on FBO
-	glBindFramebuffer(GL_FRAMEBUFFER, 0); // finally unbind the FBO and draw to window
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	return { depthMapFBO, depthMap };
 }
@@ -221,7 +224,7 @@ int main()
 	GrayFBO ssaoFBO = generateGrayFBO(); // used for calculating ssao texture
 	GrayFBO ssaoBlur = generateGrayFBO(); // used for blurring the texture to de-noise
 
-	unsigned int SHADOW_WIDTH = 9182, SHADOW_HEIGHT = 9182;
+	unsigned int SHADOW_WIDTH = 12000, SHADOW_HEIGHT = 12000;
 	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
 
 	unsigned int normalMap = loadTexture("normal_map.png");
@@ -232,13 +235,15 @@ int main()
 	
 	// light constants
 	glm::vec3 lightPos(-2.0f, 4.0f, -1.0f);
-	quadShader.use();
-	quadShader.setInt("depthMap", 0);
-	glm::vec3 lightColor(0.4, 0.3, 0.2);
-	float nearPlane = 1.0f, farPlane = 7.5f;
-	glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
-	glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+	glm::vec3 lightColor(0.3);
+	glm::mat4 lightProjection, lightView;
+	glm::mat4 lightSpaceMatrix;
+	float near_plane = 1.0f, far_plane = 7.5f;
+	//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
+	lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+	lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+	lightSpaceMatrix = lightProjection * lightView;
+	// render scene from light's point of view
 	depthShader.use();
 	depthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 
@@ -277,7 +282,7 @@ int main()
 	deferredShader.setInt("shadowMap", 5);
 
 	unsigned int objVAO, numVertices;
-	parseOBJ("tyra.obj", objVAO, numVertices);
+	parseOBJ("teapot.obj", objVAO, numVertices);
 
 	unsigned int obj2VAO, numVertices2;
 	parseOBJ("backpack.obj", obj2VAO, numVertices2);
@@ -296,22 +301,21 @@ int main()
 		depthShader.use();
 		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO.FBO);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, shadowFBO.colorBuffer);
 		glClear(GL_DEPTH_BUFFER_BIT);
 		drawScene(depthShader);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(2.0f, 2.5f, 1.3));
+		model = glm::translate(model, glm::vec3(0.4f, 3.0f, 1.0));
 		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
-		model = glm::scale(model, glm::vec3(0.5));
+		model = glm::scale(model, glm::vec3(2.0));
 		depthShader.setMat4("model", model);
 		drawObj(objVAO, numVertices);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(-2.0f, 0.0f, 2.0));
-		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
-		model = glm::scale(model, glm::vec3(0.25));
+		model = glm::translate(model, glm::vec3(-2.0f, 1.6f, 2.0));
+		model = glm::rotate(model, glm::radians(180.0f), glm::normalize(glm::vec3(1.0, 1.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.75));
 		depthShader.setMat4("model", model);
 		drawObj(obj2VAO, numVertices2);
+
 
 		// draw depth texture to screen
 		/*
@@ -333,15 +337,15 @@ int main()
 		gBufferShader.setMat4("view", viewMat);	
 		drawScene(gBufferShader);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(2.0f, 2.5f, 1.3));
+		model = glm::translate(model, glm::vec3(0.4f, 3.0f, 1.0));
 		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
-		model = glm::scale(model, glm::vec3(0.5));
+		model = glm::scale(model, glm::vec3(2.0));
 		gBufferShader.setMat4("model", model);
 		drawObj(objVAO, numVertices);
 		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(-2.0f, 0.0f, 2.0));
-		//model = glm::rotate(model, glm::radians(60.0f), glm::normalize(glm::vec3(1.0, 0.0, 1.0)));
-		model = glm::scale(model, glm::vec3(0.25));
+		model = glm::translate(model, glm::vec3(-2.0f, 1.6f, 2.0));
+		model = glm::rotate(model, glm::radians(180.0f), glm::normalize(glm::vec3(1.0, 1.0, 1.0)));
+		model = glm::scale(model, glm::vec3(0.75));
 		gBufferShader.setMat4("model", model);
 		drawObj(obj2VAO, numVertices2);
 
