@@ -9,76 +9,101 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{8a4d12b3-b0ae-4bad-8eb7-19daabcc2b0c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\imgui">
-      <UniqueIdentifier>{8c523b1a-f92b-4802-9138-b287beabc084}</UniqueIdentifier>
+    <Filter Include="Source Files\OpenGL">
+      <UniqueIdentifier>{7b6bc91b-3b36-418a-b00c-1db0157284d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\OpenGL">
+      <UniqueIdentifier>{9d0eddc9-2681-46f6-a011-964530010339}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Helpers">
+      <UniqueIdentifier>{fdefe732-ff60-42e1-8e41-0c5dc6ee3977}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Helpers">
+      <UniqueIdentifier>{58944ae7-78b7-4971-81c5-0c9128aefb9d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\window.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\main.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="dep\GLAD\src\glad.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\pch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\shader.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\OpenGL</Filter>
     </ClCompile>
-    <ClCompile Include="src\input.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\window.cpp">
+      <Filter>Source Files\OpenGL</Filter>
     </ClCompile>
     <ClCompile Include="src\camera.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\math.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Helpers</Filter>
     </ClCompile>
     <ClCompile Include="src\draw.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="dep\GLAD\src\glad.c">
+      <Filter>Source Files\OpenGL</Filter>
+    </ClCompile>
+    <ClCompile Include="src\input.cpp">
+      <Filter>Source Files\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\math.cpp">
+      <Filter>Source Files\Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\texture.cpp">
+      <Filter>Source Files\OpenGL</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\window.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\pch.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="src\shader.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\OpenGL</Filter>
+    </ClInclude>
+    <ClInclude Include="src\window.h">
+      <Filter>Header Files\OpenGL</Filter>
     </ClInclude>
     <ClInclude Include="src\camera.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\input.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\math.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Helpers</Filter>
     </ClInclude>
     <ClInclude Include="src\draw.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\input.h">
+      <Filter>Header Files\Helpers</Filter>
     </ClInclude>
     <ClInclude Include="src\geometry.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\math.h">
+      <Filter>Header Files\Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="src\texture.h">
+      <Filter>Header Files\OpenGL</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\shaders\ssao_gbuffer.shader" />
-    <None Include="res\shaders\ssao_main.shader" />
-    <None Include="res\shaders\ssao_blur.shader" />
-    <None Include="res\shaders\deferred_light.shader" />
-    <None Include="res\shaders\depth_map.shader" />
-    <None Include="res\shaders\depth_quad.shader" />
-    <None Include="res\shaders\full_tex.shader" />
+    <None Include="res\shaders\deferred_light.shader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="res\shaders\depth_map.shader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="res\shaders\full_tex.shader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="res\shaders\ssao_blur.shader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="res\shaders\ssao_gbuffer.shader">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="res\shaders\ssao_main.shader">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

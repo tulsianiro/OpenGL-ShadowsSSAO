@@ -109,6 +109,16 @@ void Shader::setVec3(std::string name, glm::vec3& val)
 {
 	glUniform3fv(glGetUniformLocation(programID, name.c_str()), 1, &val[0]);
 }
+
+void Shader::setVec3Array(std::string name, std::vector<glm::vec3> &vec)
+{
+	for (unsigned int i = 0; i < vec.size(); ++i)
+	{
+		std::string uniform = name + "[" + std::to_string(i) + "]";
+		this->setVec3(uniform, vec[i]);
+	}
+}
+
 void Shader::setVec3(std::string name, float x, float y, float z)
 {
 	glUniform3f(glGetUniformLocation(programID, name.c_str()), x, y, z);

@@ -30,6 +30,7 @@ struct Shader
 	void setVec2(std::string name, float x, float y);
     void setVec3(std::string name, glm::vec3& val);
     void setVec3(std::string name, float x, float y, float z);
+	void setVec3Array(std::string name, std::vector<glm::vec3> &vec);
     void setVec4(std::string name, glm::vec4& val);
     void setVec4(std::string name, float x, float y, float z, float w);
     void setMat4(std::string name, glm::mat4& val);

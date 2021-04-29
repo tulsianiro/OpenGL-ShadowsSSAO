@@ -1,36 +1,35 @@
 #shader vertex
 #version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec2 aTexCoords;
-out vec2 TexCoords;
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 uv;
+out vec2 pixelUV;
 
 void main()
 {
-    TexCoords = aTexCoords;
-    gl_Position = vec4(aPos, 1.0);
+    gl_Position = vec4(position, 1.0);
+    pixelUV = uv;
 }
 
 #shader fragment
 #version 330 core
-in vec2 TexCoords;
-out float FragColor;
+in vec2 pixelUV;
+out float pixelCol;
 
-uniform sampler2D ssaoInput;
+uniform sampler2D initialSSAOTex;
 
 void main()
 {
-    // size of a texel in x and y. 
-    vec2 texelSize = 1.0 / vec2(textureSize(ssaoInput, 0));
-    float result = 0.0;
-    for (int x = -2; x < 2; ++x)
+    vec2 texSize = textureSize(initialSSAOTex, 0);
+    vec2 texDim = vec2(1.0) / texSize;
+    float accum = 0.0;
+    for (int y = -2; y < 2; ++y) { for (int x = -2; x < 2; ++x)
     {
-        for (int y = -2; y < 2; ++y)
-        {
-            // offset between [-2, -2], [1, 1]. gives us a 4x4 block, which is same as noise texture
-            // this makes sense since we want to remove the 4x4 noise pattern.
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
-            result += texture(ssaoInput, TexCoords + offset).r;
-        }
-    }
-    FragColor = result / (4.0 * 4.0);
+        // offset between [-2, -2], [1, 1]. gives us a 4x4 block, which is same as noise texture
+        // this makes sense since we want to remove the 4x4 noise pattern. (centered around pixel)
+        vec2 sampleUV = pixelUV + vec2(x * texDim.x, y * texDim.y);
+        accum += texture(initialSSAOTex, sampleUV).x;
+    }}
+    // 16 is hardcoded since that is the value we initially chose based on resources like LearnOpenGL,
+    // and never changed since the result looked quite good.
+    pixelCol = accum / 16.0; 
 }

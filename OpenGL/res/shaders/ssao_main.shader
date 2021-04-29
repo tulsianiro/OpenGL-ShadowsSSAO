@@ -1,46 +1,46 @@
 #shader vertex
 #version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec2 aTexCoords;
+layout(location = 0) in vec3 vertPos;
+layout(location = 1) in vec2 vertUV;
 
-out vec2 TexCoords;
+out vec2 pixUV;
 
 void main()
 {
-    TexCoords = aTexCoords;
-    gl_Position = vec4(aPos, 1.0);
+    pixUV = vertUV;
+    gl_Position = vec4(vertPos, 1.0);
 }
 
 #shader fragment
 #version 330 core
 out float FragColor;
 
-in vec2 TexCoords;
+in vec2 pixUV;
 
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D texNoise;
 
-uniform vec3 samples[64];
+uniform vec3 kernel[64];
 
-// parameters (you'd probably want to use them as uniforms to more easily tweak the effect)
-int kernelSize = 64; // size of sample kernel
-float radius = 0.5; // ssao hemisphere radius
-float bias = 0.025; // bias to avoid acne
+// these values were largely taken from LearnOpenGL, since they seemed to work without tweaking
+int kernelSize = 64; 
+float radius = 0.5; 
+float bias = 0.025; 
 
 // tile noise texture over screen based on screen dimensions divided by noise size
-const vec2 noiseScale = vec2(1280.0 / 4.0, 720.0 / 4.0);
+const vec2 noiseScale = vec2(1280.0 / 4.0, 720.0 / 4.0); // used for random rotation
 
 uniform mat4 projection;
 
 void main()
 {
     // get fragment position from the GBuffer
-    vec3 fragPos = texture(gPosition, TexCoords).xyz;
+    vec3 fragPos = texture(gPosition, pixUV).xyz;
     // get the fragment normal from the GBuffer
-    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
-    // take the TexCoords then scale by noiseScale which makes us tile every 4 pixels per dimension
-    vec3 randomVec = normalize(texture(texNoise, TexCoords * noiseScale).xyz);
+    vec3 normal = normalize(texture(gNormal, pixUV).rgb);
+    // take the pixUV then scale by noiseScale which makes us tile every 4 pixels per dimension
+    vec3 randomVec = normalize(texture(texNoise, pixUV * noiseScale).xyz);
 
     // create Frenet Frame / TBN matrix: from tangent-space to view-space
     // the TBN basis is slightly rotated each time
@@ -52,8 +52,10 @@ void main()
     float occlusion = 0.0;
     for (int i = 0; i < kernelSize; ++i)
     {
-        vec3 samplePos = TBN * samples[i]; // from tangent to view-space, since normal comes into shader in View Space
-        samplePos = fragPos + samplePos * radius; // radius of the hemisphere, samplePos is pos assuming pixel as origin
+        // from tangent to view-space, since normal comes into shader in View Space
+        vec3 samplePos = TBN * kernel[i]; 
+        // radius of the hemisphere, samplePos is pos assuming pixel as origin
+        samplePos = fragPos + samplePos * radius; 
 
         // we want the uv offset in our GBuffer textures for this fragment sample
         vec4 offset = vec4(samplePos, 1.0); // initially put into vector
@@ -64,11 +66,12 @@ void main()
         // get the depth for this particular fragment sample
         float sampleDepth = texture(gPosition, offset.xy).z;
 
+        // check to make sure objects don't bleed occlude onto far away objects. 
         // make sure that the z value is within the sample hemisphere. also weigh less depending on dist
-        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
+        float tooFar = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
         // if GBuffer depth of the pixel corresponding to sample is greater than the sample's z, 
         // then occluded by nearby obj.
-        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
+        occlusion += (sampleDepth >= samplePos.z + bias ? 1.0 : 0.0) * tooFar;
     }
 
     // sub from 1 so we can just use as a scaling factor for ambient light. more occluded less light.

@@ -1,9 +1,7 @@
 #include "pch.h"
 #include "shader.h"
+#include "texture.h"
 #include "draw.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 struct GBuffer
 {
@@ -15,43 +13,6 @@ struct GrayFBO
 {
 	unsigned int FBO, colorBuffer;
 };
-
-unsigned int loadTexture(char const* path)
-{
-	unsigned int textureID;
-	glGenTextures(1, &textureID);
-
-	int width, height, nrComponents;
-	unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
-	if (data)
-	{
-		GLenum format;
-		if (nrComponents == 1)
-			format = GL_RED;
-		else if (nrComponents == 3)
-			format = GL_RGB;
-		else if (nrComponents == 4)
-			format = GL_RGBA;
-
-		glBindTexture(GL_TEXTURE_2D, textureID);
-		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT); // for this tutorial: use GL_CLAMP_TO_EDGE to prevent semi-transparent borders. Due to interpolation it takes texels from next repeat 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, format == GL_RGBA ? GL_CLAMP_TO_EDGE : GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		stbi_image_free(data);
-	}
-	else
-	{
-		std::cout << "Texture failed to load at path: " << path << std::endl;
-		stbi_image_free(data);
-	}
-
-	return textureID;
-}
 
 GBuffer generateGBuffer()
 {
@@ -101,9 +62,6 @@ GBuffer generateGBuffer()
 	glGenRenderbuffers(1, &rboDepth); glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT); // alloc
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
-	// finally check if framebuffer is complete
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 
 	return { gBuffer, gPosition, gNormal, gAlbedo, gLightSpacePosition };
@@ -120,8 +78,6 @@ GrayFBO generateGrayFBO()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBuffer, 0);
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "SSAO Framebuffer not complete!" << std::endl;
 	glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 
 	return { FBO, colorBuffer };
@@ -140,7 +96,8 @@ GrayFBO generateShadowFBO(unsigned int shadowWidth, unsigned int shadowHeight)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+	// objects not in the light's view prism should never be in shadow
+	float borderColor[] = { 1.0, 1.0, 1.0, 1.0 }; 
 	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 	// attach depth texture as FBO's depth buffer
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
@@ -152,19 +109,16 @@ GrayFBO generateShadowFBO(unsigned int shadowWidth, unsigned int shadowHeight)
 	return { depthMapFBO, depthMap };
 }
 
-std::vector<glm::vec3> generateSSAOKernel()
+std::vector<glm::vec3> generateSSAOKernel(unsigned int sampleCount)
 {
-	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0);
-	std::default_random_engine generator;
-
 	std::vector<glm::vec3> ssaoKernel;
-	for (unsigned int i = 0; i < 64; ++i)
+	for (unsigned int i = 0; i < sampleCount; ++i)
 	{
 		// generate a direction vector that precludes the bottom half of a sphere
-		glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, randomFloats(generator));
+		glm::vec3 sample(getRandom(-1.0, 1.0), getRandom(-1.0, 1.0), getRandom(0.0, 1.0));
 		sample = glm::normalize(sample); // normalize it since it is a direction
-		sample *= randomFloats(generator); // multiply by a float between 0 and 1 to get a magnitude 
-		float scale = float(i) / 64.0;
+		sample *= getRandom(0.0, 1.0); // multiply by a float between 0 and 1 to get a magnitude 
+		float scale = float(i) / (float)sampleCount;
 
 		// the above uniformly distributes our sample kernel, so we decrease the scaling factor such that 
 		// it accelerates towards the center as i increases.
@@ -178,16 +132,13 @@ std::vector<glm::vec3> generateSSAOKernel()
 
 unsigned int generateSSAONoiseTexture()
 {
-	std::uniform_real_distribution<GLfloat> randomFloats(0.0, 1.0);
-	std::default_random_engine generator;
-
 	std::vector<glm::vec3> ssaoNoise;
 	// create 16 rotations that will be tiled across our pixels
 	for (unsigned int i = 0; i < 16; i++)
 	{
 		// rotate around z-axis (in tangent space). values between -1 and 1.
 		// direction vectors in tangent space, oriented about the normal
-		glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0, 0.0f);
+		glm::vec3 noise(getRandom(-1.0, 1.0), getRandom(-1.0, 1.0), 0.0f);
 		ssaoNoise.push_back(noise);
 	}
 	unsigned int noiseTexture; glGenTextures(1, &noiseTexture);
@@ -240,19 +191,19 @@ int main()
 	unsigned int SHADOW_WIDTH = 16000, SHADOW_HEIGHT = 16000;
 	GrayFBO shadowFBO = generateShadowFBO(SHADOW_WIDTH, SHADOW_HEIGHT);
 
-	unsigned int normalMap = loadTexture("normal_map.png");
+	Texture normalMap("normal_map.png");
 
-	// generate sample kernel to pass into SSAO shader
-	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel();
+	// generate sample kernel to pass into SSAO shader. learn opengl reccomends 64 samples, and 
+	// it works quite well, at least to my eye.
+	std::vector<glm::vec3> ssaoKernel = generateSSAOKernel(64);
 	unsigned int noiseTexture = generateSSAONoiseTexture();
 
 	// light constants
 	glm::vec3 lightPos(5.0f, 8.0f, 9.0f);
-	glm::vec3 lightColor(0.3);
+	glm::vec3 lightColor(0.3f);
 	glm::mat4 lightProjection, lightView;
 	glm::mat4 lightSpaceMatrix;
 	float near_plane = 1.0f, far_plane = 30.0f;
-	//lightProjection = glm::perspective(glm::radians(45.0f), (GLfloat)SHADOW_WIDTH / (GLfloat)SHADOW_HEIGHT, near_plane, far_plane); // note that if you use a perspective projection matrix you'll have to change the light position as the current light position isn't enough to reflect the whole scene
 	lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
 	lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
 	lightSpaceMatrix = lightProjection * lightView;
@@ -266,14 +217,12 @@ int main()
 	gBufferShader.use();
 	gBufferShader.setMat4("projection", projectionMat);
 	gBufferShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-	gBufferShader.setInt("invertedNormals", 0);
 	gBufferShader.setInt("normalMap", 0);
 	/*
 		SSAO CONSTANT UNIFORMS
 	*/
 	ssaoShader.use();
-	for (unsigned int i = 0; i < 64; ++i)
-		ssaoShader.setVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+	ssaoShader.setVec3Array("kernel", ssaoKernel);
 	ssaoShader.setMat4("projection", projectionMat);
 	ssaoShader.setInt("gPosition", 0);
 	ssaoShader.setInt("gNormal", 1);
@@ -290,7 +239,7 @@ int main()
 	deferredShader.setInt("gPosition", 0);
 	deferredShader.setInt("gNormal", 1);
 	deferredShader.setInt("gAlbedo", 2);
-	deferredShader.setInt("ssao", 3);
+	deferredShader.setInt("ssaoScalarTex", 3);
 	deferredShader.setInt("gLightSpacePosition", 4);
 	deferredShader.setInt("shadowMap", 5);
 
@@ -302,7 +251,7 @@ int main()
 
 	while (!glfwWindowShouldClose(window))
 	{
-		float currentFrame = glfwGetTime();
+		float currentFrame = (float)glfwGetTime();
 		dt = currentFrame - lastFrame;
 		lastFrame = currentFrame;
 		processFrameInput(window, dt);
@@ -329,24 +278,12 @@ int main()
 		depthShader.setMat4("model", model);
 		drawObj(obj2VAO, numVertices2);
 
-
-		// draw depth texture to screen
-		/*
-		glViewport(0, 0, 1280, 720);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		quadShader.use();
-		drawQuad();
-		*/
-
 		// geometry
-
 		glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, gBuffer.gBuffer);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		gBufferShader.use();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, normalMap);
+		normalMap.bind(GL_TEXTURE0);
 		gBufferShader.setMat4("view", viewMat);
 		drawScene(gBufferShader);
 		model = glm::mat4(1.0f);
@@ -392,8 +329,8 @@ int main()
 			deferredShader.use();
 			// send light relevant uniforms
 			glm::vec3 lightPosView = glm::vec3(viewMat * glm::vec4(lightPos, 1.0));
-			deferredShader.setVec3("light.Position", lightPosView);
-			deferredShader.setVec3("light.Color", lightColor);
+			deferredShader.setVec3("lPos", lightPosView);
+			deferredShader.setVec3("lCol", lightColor);
 			deferredShader.setBool("useSSAO", useSSAO);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, gBuffer.gPosition);

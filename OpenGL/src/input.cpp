@@ -49,6 +49,7 @@ void processFrameInput(GLFWwindow *window, float dt)
 
 		xOffset *= globalCamera.sensitivity; yOffset *= globalCamera.sensitivity;
 
+		// a lot of this math for the FPS cam was found on learnopengl.com
 		globalCamera.yaw += (float)xOffset;
 		globalCamera.pitch += (float)yOffset;
 		globalCamera.pitch = glm::clamp(globalCamera.pitch, -89.0f, 89.0f);

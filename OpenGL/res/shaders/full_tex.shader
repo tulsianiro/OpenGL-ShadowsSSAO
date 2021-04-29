@@ -1,29 +1,29 @@
 #shader vertex
 #version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec2 aTexCoords;
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 uv;
 
-out vec2 TexCoords;
+out vec2 pixelUV;
 
 void main()
 {
-    TexCoords = aTexCoords;
-    gl_Position = vec4(aPos, 1.0);
+    pixelUV = uv;
+    gl_Position = vec4(position, 1.0);
 }
 
 #shader fragment
 #version 330 core
-out vec4 FragColor;
+out vec4 pixelCol;
 
-in vec2 TexCoords;
+in vec2 pixelUV;
 uniform sampler2D myTex;
 uniform bool grayscale;
 
 void main()
 {
-    FragColor = texture(myTex, TexCoords);
+    pixelCol = texture(myTex, pixelUV);
     if (grayscale)
     {
-        FragColor = vec4(FragColor.r, FragColor.r, FragColor.r, 1.0);
+        pixelCol = vec4(pixelCol.r, pixelCol.r, pixelCol.r, 1.0);
     }
 }

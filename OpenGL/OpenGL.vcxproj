@@ -111,6 +111,7 @@
     </ClCompile>
     <ClCompile Include="src\shader.cpp" />
     <ClCompile Include="src\window.cpp" />
+    <ClCompile Include="src\texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\camera.h" />
@@ -121,6 +122,7 @@
     <ClInclude Include="src\pch.h" />
     <ClInclude Include="src\shader.h" />
     <ClInclude Include="src\window.h" />
+    <ClInclude Include="src\texture.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\shaders\deferred_light.shader" />
@@ -129,7 +131,6 @@
     <None Include="res\shaders\ssao_blur.shader" />
     <None Include="res\shaders\ssao_gbuffer.shader" />
     <None Include="res\shaders\ssao_main.shader" />
-    <None Include="res\shaders\depth_quad.shader" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
